@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Xero Live</title>
+<style>
+  :root{--bg:#0f1115;--card:#1a1d24;--line:#2a2f3a;--txt:#e8eaef;--mut:#8a91a0;--acc:#f5c518;--ok:#3ecf8e;--err:#ff5c5c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,system-ui,sans-serif;
+       padding:calc(env(safe-area-inset-top) + 12px) 14px calc(env(safe-area-inset-bottom) + 20px)}
+  h1{font-size:18px;margin:0 0 10px;display:flex;justify-content:space-between;align-items:center}
+  .st{font-size:13px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--line);color:var(--mut)}
+  .st.on{background:rgba(62,207,142,.15);color:var(--ok)}
+  button{font:inherit;font-weight:600;border:0;border-radius:12px;padding:13px;width:100%;background:var(--acc);color:#111}
+  button.sec{background:var(--line);color:var(--txt)}
+  .row{display:flex;gap:8px;margin:8px 0}
+  .card{background:var(--card);border-radius:16px;padding:14px;margin:10px 0}
+  .big{text-align:center}
+  .big .v{font-size:72px;font-weight:700;letter-spacing:-2px;font-variant-numeric:tabular-nums;line-height:1}
+  .big .u{color:var(--mut);font-size:18px}
+  .big .n{color:var(--mut);margin-top:6px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .k{background:var(--bg);border-radius:10px;padding:8px;text-align:center}
+  .k b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+  .k span{font-size:12px;color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}
+  th{color:var(--mut);font-weight:500;font-size:13px}
+  td:first-child,th:first-child{text-align:left}
+  .ok{color:var(--ok)}.err{color:var(--err)}.mut{color:var(--mut)}
+  details summary{cursor:pointer;color:var(--mut);padding:4px 0}
+  label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+  input{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--txt)}
+  pre{white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--mut);max-height:240px;overflow:auto;margin:6px 0 0}
+  .warn{background:rgba(255,92,92,.12);color:var(--err);padding:10px;border-radius:10px;font-size:14px}
+</style>
+</head>
+<body>
+<h1>Xero Live <span id="st" class="st">Déconnecté</span></h1>
+
+<div id="nobt" class="warn" hidden>Bluetooth web indisponible. Sur iPhone, ouvre cette page dans l'app <b>Bluefy</b> (gratuite), pas dans Safari.</div>
+
+<div class="row">
+  <button id="btConn">Connecter le Xero</button>
+</div>
+
+<div class="card big">
+  <div class="v" id="last">—</div>
+  <div class="u">m/s</div>
+  <div class="n" id="lastInfo">En attente d'un tir…</div>
+</div>
+
+<div class="card">
+  <div class="grid">
+    <div class="k"><b id="sAvg">—</b><span>Moyenne</span></div>
+    <div class="k"><b id="sSd">—</b><span>Écart-type</span></div>
+    <div class="k"><b id="sEs">—</b><span>Disp. extrême</span></div>
+    <div class="k"><b id="sMin">—</b><span>Min</span></div>
+    <div class="k"><b id="sMax">—</b><span>Max</span></div>
+    <div class="k"><b id="sE">—</b><span>Énergie moy. (J)</span></div>
+  </div>
+</div>
+
+<div class="row">
+  <button class="sec" id="btNew">Nouvelle série</button>
+  <button class="sec" id="btCsv">Copier CSV</button>
+  <button class="sec" id="btRetry">Renvoyer</button>
+</div>
+
+<div class="card">
+  <table>
+    <thead><tr><th>#</th><th>Heure</th><th>m/s</th><th>API</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <details>
+    <summary>Réglages</summary>
+    <label>Libellé de la série (arme, munition…)</label>
+    <input id="cfLabel" placeholder="ex. .308 Win – 168 gr">
+    <label>Masse du projectile (g) – pour l'énergie</label>
+    <input id="cfMass" type="number" step="0.01" inputmode="decimal" placeholder="ex. 10.89">
+    <label>URL de l'API (POST JSON, une ligne par tir)</label>
+    <input id="cfUrl" placeholder="https://xxxx.supabase.co/rest/v1/shots">
+    <label>Clé API (Supabase : clé anon/publishable)</label>
+    <input id="cfKey" type="password" autocomplete="off">
+    <p class="mut" style="font-size:12px">Supabase : en-têtes <code>apikey</code> + <code>Authorization</code> ajoutés automatiquement. Autre API : <code>Authorization: Bearer &lt;clé&gt;</code>.</p>
+  </details>
+</div>
+
+<div class="card">
+  <details>
+    <summary>Journal brut (debug)</summary>
+    <button class="sec" id="btLogCopy" style="margin-top:6px">Copier le journal</button>
+    <pre id="log"></pre>
+  </details>
+</div>
+
+<script>
+const SVC  = '6a4e2800-667b-11e3-949a-0800200c9a66';
+const CHRS = ['6a4e2810','6a4e2811','6a4e2812','6a4e2813','6a4e2814']
+             .map(p => p + '-667b-11e3-949a-0800200c9a66');
+
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); }catch{ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} }
+};
+
+let shots = store.get('xero_shots', []);
+let device = null, buf = [], idleT = null, lastKey = '', logLines = [];
+let sessionId = store.get('xero_session', null) || newSessionId();
+
+function newSessionId(){ const id = new Date().toISOString(); store.set('xero_session', id); return id; }
+
+// ---------- Réglages ----------
+['Label','Mass','Url','Key'].forEach(k => {
+  const el = $('cf'+k); el.value = store.get('xero_cf'+k, '');
+  el.addEventListener('change', () => store.set('xero_cf'+k, el.value.trim()));
+});
+const cf = k => store.get('xero_cf'+k, '');
+
+// ---------- Journal ----------
+function log(msg){
+  const t = new Date().toLocaleTimeString('fr-FR',{hour12:false}) + '.' + String(Date.now()%1000).padStart(3,'0');
+  logLines.push(`[${t}] ${msg}`); if (logLines.length > 400) logLines.shift();
+  $('log').textContent = logLines.slice(-150).join('\n');
+}
+const hex = a => Array.from(a, b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+
+// ---------- Décodage ----------
+// Trame (après retrait de l'en-tête 2 octets de chaque fragment), structure type protobuf :
+// 15 <f32 vitesse> 12 <len> 0D <f32 min> 15 <f32 max> 1D <f32 moy> 20 <varint nb tirs>
+function f32(a, i){ return new DataView(Uint8Array.from(a.slice(i, i+4)).buffer).getFloat32(0, true); }
+function varint(a, i){ let r = 0, s = 0; while (i < a.length){ const b = a[i++]; r |= (b & 0x7f) << s; if (!(b & 0x80)) return r; s += 7; } return null; }
+
+function tryParse(){
+  for (let i = 0; i + 23 < buf.length; i++){
+    if (buf[i]===0x15 && buf[i+5]===0x12 && buf[i+7]===0x0D && buf[i+12]===0x15 && buf[i+17]===0x1D && buf[i+22]===0x20){
+      const v = f32(buf,i+1), mn = f32(buf,i+8), mx = f32(buf,i+13), avg = f32(buf,i+18), n = varint(buf,i+23);
+      if (n === null) return false;           // fragment suivant pas encore arrivé
+      if (!(v > 5 && v < 2500)) continue;     // garde-fou
+      buf = [];
+      onShot({v, min:mn, max:mx, avg, n});
+      return true;
+    }
+  }
+  return false;
+}
+
+function onNotify(e){
+  const dv = e.target.value;
+  const a = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+  log(`${e.target.uuid.slice(4,8)} ← ${hex(a)}`);
+  if (a.length > 2) buf.push(...a.slice(2));
+  tryParse();
+  clearTimeout(idleT); idleT = setTimeout(() => { buf = []; }, 1500);
+}
+
+// ---------- Tirs ----------
+function onShot(s){
+  const key = s.n + '/' + s.v.toFixed(2);
+  if (key === lastKey) return;               // doublon
+  lastKey = key;
+  const shot = { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+                 ts: new Date().toISOString(), n: s.n, v: +s.v.toFixed(2),
+                 xmin: +s.min.toFixed(2), xmax: +s.max.toFixed(2), xavg: +s.avg.toFixed(2), api: 'pending' };
+  shots.push(shot); save(); render();
+  try { navigator.vibrate && navigator.vibrate(60); } catch {}
+  log(`TIR n°${s.n} : ${s.v.toFixed(2)} m/s`);
+  send(shot);
+}
+
+function stats(){
+  const v = shots.map(s => s.v); const n = v.length;
+  if (!n) return null;
+  const avg = v.reduce((a,b)=>a+b,0)/n;
+  const sd = n > 1 ? Math.sqrt(v.reduce((a,b)=>a+(b-avg)**2,0)/(n-1)) : 0;
+  const mn = Math.min(...v), mx = Math.max(...v);
+  const m = parseFloat(String(cf('Mass')).replace(',','.'));
+  const e = m > 0 ? 0.5 * (m/1000) * avg*avg : null;
+  return {n, avg, sd, mn, mx, es: mx-mn, e};
+}
+
+function render(){
+  const last = shots[shots.length-1];
+  $('last').textContent = last ? last.v.toFixed(1) : '—';
+  $('lastInfo').textContent = last ? `Tir n°${last.n} (chrono) · ${new Date(last.ts).toLocaleTimeString('fr-FR')}` : "En attente d'un tir…";
+  const s = stats(), f = (x,d=1) => x==null ? '—' : x.toFixed(d);
+  $('sAvg').textContent = s ? f(s.avg) : '—';
+  $('sSd').textContent  = s ? f(s.sd,2) : '—';
+  $('sEs').textContent  = s ? f(s.es) : '—';
+  $('sMin').textContent = s ? f(s.mn) : '—';
+  $('sMax').textContent = s ? f(s.mx) : '—';
+  $('sE').textContent   = s && s.e != null ? Math.round(s.e) : '—';
+  $('tb').innerHTML = shots.slice().reverse().map(x =>
+    `<tr><td>${x.n}</td><td>${new Date(x.ts).toLocaleTimeString('fr-FR')}</td><td>${x.v.toFixed(2)}</td>
+     <td class="${x.api==='ok'?'ok':x.api==='err'?'err':'mut'}">${x.api==='ok'?'✓':x.api==='err'?'✗':x.api==='off'?'–':'…'}</td></tr>`).join('');
+}
+function save(){ store.set('xero_shots', shots); }
+
+// ---------- API ----------
+async function send(shot){
+  const url = cf('Url'), key = cf('Key');
+  if (!url){ shot.api = 'off'; save(); render(); return; }
+  const body = { session_id: sessionId, label: cf('Label') || null, shot_number: shot.n,
+                 velocity_ms: shot.v, chrono_min_ms: shot.xmin, chrono_max_ms: shot.xmax,
+                 chrono_avg_ms: shot.xavg, bullet_mass_g: parseFloat(String(cf('Mass')).replace(',','.')) || null,
+                 shot_at: shot.ts };
+  const h = { 'Content-Type': 'application/json' };
+  if (key){
+    if (/supabase\.co/.test(url)){ h.apikey = key; h.Authorization = 'Bearer ' + key; h.Prefer = 'return=minimal'; }
+    else h.Authorization = 'Bearer ' + key;
+  }
+  try{
+    const r = await fetch(url, { method:'POST', headers:h, body: JSON.stringify(body) });
+    shot.api = r.ok ? 'ok' : 'err';
+    if (!r.ok) log(`API ${r.status} : ${(await r.text()).slice(0,200)}`);
+  }catch(err){ shot.api = 'err'; log('API erreur : ' + err.message); }
+  save(); render();
+}
+
+// ---------- Bluetooth ----------
+async function connect(){
+  if (device && device.gatt.connected){ device.gatt.disconnect(); return; }
+  try{
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'Xero' }], optionalServices: [SVC] });
+    device.addEventListener('gattserverdisconnected', onDisc);
+    await openGatt();
+  }catch(err){ log('Connexion : ' + err.message); setSt(false); }
+}
+async function openGatt(){
+  setSt(false, 'Connexion…');
+  const srv = await device.gatt.connect();
+  const svc = await srv.getPrimaryService(SVC);
+  let n = 0;
+  for (const u of CHRS){
+    try{
+      const c = await svc.getCharacteristic(u);
+      c.addEventListener('characteristicvaluechanged', onNotify);
+      await c.startNotifications(); n++;
+    }catch{}
+  }
+  log(`Connecté à ${device.name} – ${n} canaux écoutés`);
+  setSt(true);
+}
+async function onDisc(){
+  setSt(false, 'Reconnexion…'); log('Déconnecté');
+  for (let i = 0; i < 5 && device; i++){
+    await new Promise(r => setTimeout(r, 2000));
+    try{ await openGatt(); return; }catch(e){ log('Reconnexion échouée : ' + e.message); }
+  }
+  setSt(false);
+}
+function setSt(on, txt){
+  $('st').textContent = txt || (on ? (device?.name || 'Connecté') : 'Déconnecté');
+  $('st').className = 'st' + (on ? ' on' : '');
+  $('btConn').textContent = on ? 'Déconnecter' : 'Connecter le Xero';
+}
+
+// ---------- Boutons ----------
+$('btConn').onclick = connect;
+$('btNew').onclick = () => {
+  if (shots.length && !$('btNew').dataset.c){ $('btNew').dataset.c = 1; $('btNew').textContent = 'Confirmer ?';
+    setTimeout(()=>{ delete $('btNew').dataset.c; $('btNew').textContent='Nouvelle série'; }, 3000); return; }
+  delete $('btNew').dataset.c; $('btNew').textContent = 'Nouvelle série';
+  shots = []; lastKey = ''; sessionId = newSessionId(); save(); render();
+};
+$('btCsv').onclick = async () => {
+  const csv = ['n;heure;vitesse_ms;label'].concat(shots.map(s =>
+    `${s.n};${s.ts};${String(s.v).replace('.',',')};${cf('Label')}`)).join('\n');
+  try{ await navigator.clipboard.writeText(csv); $('btCsv').textContent = 'Copié ✓'; }
+  catch{ $('btCsv').textContent = 'Échec'; }
+  setTimeout(()=> $('btCsv').textContent = 'Copier CSV', 1500);
+};
+$('btRetry').onclick = () => shots.filter(s => s.api === 'err' || s.api === 'off').forEach(send);
+$('btLogCopy').onclick = async () => { try{ await navigator.clipboard.writeText(logLines.join('\n')); }catch{} };
+
+if (!navigator.bluetooth){ $('nobt').hidden = false; $('btConn').disabled = true; }
+render();
+</script>
+</body>
+</html>
